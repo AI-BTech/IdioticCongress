@@ -4,7 +4,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Idiotic Congress Chat</title>
-    <link rel="stylesheet" href="stylesheet.css">
+    <!-- Add cache-busting version parameters -->
+    <link rel="stylesheet" href="stylesheet.css?v=20250521-1">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
 </head>
 <body>
     <div id="chat-container">
@@ -14,6 +18,7 @@
         <input type="text" id="message-input" placeholder="Type a message..." />
         <button id="send-button">Send</button>
     </div>
-    <script type="module" src="script.js"></script>
+    <!-- Add cache-busting version parameter -->
+    <script type="module" src="script.js?v=20250521-1"></script>
 </body>
 </html>
