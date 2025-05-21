@@ -4,41 +4,45 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Idiotic Congress Chat</title>
-    <!-- Add cache-busting version parameters -->
-    <link rel="stylesheet" href="stylesheet.css?v=20250521-2">
+    <link rel="stylesheet" href="styles.css">
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
-    <!-- Add console for debugging -->
-    <script>
-        console.log("Page loading: " + new Date().toISOString());
-        
-        // Check if Firebase is blocked by browser
-        window.addEventListener('error', function(e) {
-            if (e.filename && e.filename.includes('firebase')) {
-                console.error('Firebase script loading error:', e);
-                alert('Error loading Firebase. Your browser might be blocking it.');
-            }
-        }, true);
-    </script>
 </head>
 <body>
-    <div id="chat-container">
-        <h1>Idiotic Congress Chat</h1>
-        <p class="instructions">Enter your name and start chatting with anyone using this app!</p>
-        <input type="text" id="name-input" placeholder="Enter your name" />
-        <div id="messages"></div>
-        <input type="text" id="message-input" placeholder="Type a message..." />
-        <button id="send-button">Send</button>
-        <div class="debug-info">
-            <p>If messages aren't appearing, please check:</p>
-            <ol>
-                <li>Browser console for errors</li>
-                <li>Firebase database rules (should be read/write: true)</li>
-            </ol>
+    <div id="app">
+        <div id="login-container">
+            <h1>Idiotic Congress</h1>
+            <div class="form-group">
+                <input type="text" id="username-input" placeholder="Enter your username">
+            </div>
+            <div class="form-group">
+                <button id="login-button">Join Chat</button>
+            </div>
+        </div>
+        
+        <div id="chat-container" class="hidden">
+            <div class="chat-header">
+                <h2>Idiotic Congress Chat</h2>
+                <div class="online-users">
+                    <span id="online-count">0</span> users online
+                </div>
+            </div>
+            
+            <div class="chat-messages" id="messages"></div>
+            
+            <div class="chat-input">
+                <input type="text" id="message-input" placeholder="Type a message...">
+                <button id="send-button">Send</button>
+            </div>
         </div>
     </div>
-    <!-- Add cache-busting version parameter -->
-    <script type="module" src="script.js?v=20250521-2"></script>
+
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+    
+    <!-- App Script -->
+    <script src="app.js"></script>
 </body>
 </html>
