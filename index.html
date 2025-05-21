@@ -3,37 +3,17 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Chat App</title>
+    <title>Idiotic Congress Chat</title>
     <link rel="stylesheet" href="stylesheet.css">
-    <script type="module">
-        // Import the functions you need from the SDKs you need
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.8.0/firebase-app.js";
-        import { getDatabase, ref, set, onChildAdded } from "https://www.gstatic.com/firebasejs/11.8.0/firebase-database.js";
-
-        // Your web app's Firebase configuration
-        const firebaseConfig = {
-            apiKey: "AIzaSyBF_h4SBa9NrY7Xj5nZL44QP-ucjel8M-M",
-            authDomain: "eyechatbox.firebaseapp.com",
-            databaseURL: "https://eyechatbox-default-rtdb.firebaseio.com",
-            projectId: "eyechatbox",
-            storageBucket: "eyechatbox.appspot.com",
-            messagingSenderId: "227204788132",
-            appId: "1:227204788132:web:57d12acd7d5a90fb579b31",
-            measurementId: "G-Y7Y73CVL4X"
-        };
-
-        // Initialize Firebase
-        const app = initializeApp(firebaseConfig);
-        const database = getDatabase(app);
-    </script>
 </head>
 <body>
     <div id="chat-container">
+        <h1>Idiotic Congress Chat</h1>
         <input type="text" id="name-input" placeholder="Enter your name" />
         <div id="messages"></div>
         <input type="text" id="message-input" placeholder="Type a message..." />
         <button id="send-button">Send</button>
     </div>
-    <script src="script.js"></script>
+    <script type="module" src="script.js"></script>
 </body>
 </html>
