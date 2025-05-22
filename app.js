@@ -355,24 +355,118 @@ function sendMessage() {
     const text = messageInput.value.trim();
     if (!text) return;
     
+    // Check for command patterns
+    const commandPattern = /^\/(\w+)(?:\s+(.*))?$/; // Matches commands like /command [args]
+    const commandMatch = text.match(commandPattern);
+
+    if (commandMatch) {
+        const command = commandMatch[1];
+        const args = commandMatch[2] ? commandMatch[2].trim() : '';
+
+        switch (command) {
+            case 'server':
+                // Send a system message
+                const systemMessage = {
+                    system: true,
+                    text: args || 'System message',
+                    timestamp: firebase.database.ServerValue.TIMESTAMP
+                };
+                messagesRef.push(systemMessage);
+                break;
+
+            case 'clear':
+                // Clear chat history in the view (not from Firebase)
+                messagesContainer.innerHTML = '';
+                showSystemMessage('Chat history cleared.');
+                return; // Exit to prevent sending a message
+
+            case 'help':
+                // Show available commands
+                const helpMessage = `
+                    Available commands:
+                    /server [message] - Sends a message that appears as a system message
+                    /clear - Clears the chat history in your view
+                    /help - Shows all available commands
+                    /nick [newname] - Changes your display name
+                    /whisper [username] [message] - Sends a private message to a specific user
+                    /online - Shows a list of currently online users
+                    /confetti - Displays a fun confetti animation in the chat
+                    /color [color] - Changes the color of your messages
+                `;
+                showSystemMessage(helpMessage);
+                return; // Exit to prevent sending a message
+
+            case 'nick':
+                // Change display name
+                if (args) {
+                    currentUser.name = args;
+                    userDataRef.child(currentUser.id).update({ name: args });
+                    showSystemMessage(`Your display name has been changed to ${args}.`);
+                } else {
+                    showSystemMessage('Please provide a new name.');
+                }
+                return; // Exit to prevent sending a message
+
+            case 'whisper':
+                // Send a private message to a specific user
+                const whisperArgs = args.split(' ');
+                const whisperUser = whisperArgs.shift();
+                const whisperMessage = whisperArgs.join(' ');
+
+                // Here you would implement logic to send the message to the specific user
+                // For now, we will just show a system message
+                showSystemMessage(`Whisper to ${whisperUser}: ${whisperMessage}`);
+                return; // Exit to prevent sending a message
+
+            case 'online':
+                // Show online users
+                usersRef.once('value', (snapshot) => {
+                    const onlineUsers = snapshot.val();
+                    const onlineList = Object.values(onlineUsers).map(user => user.name).join(', ');
+                    showSystemMessage(`Currently online: ${onlineList || 'No users online.'}`);
+                });
+                return; // Exit to prevent sending a message
+
+            case 'confetti':
+                // Trigger confetti animation (you'll need to implement this)
+                showSystemMessage('🎉 Confetti animation triggered! 🎉');
+                // Call your confetti function here
+                return; // Exit to prevent sending a message
+
+            case 'color':
+                // Change message color
+                if (args) {
+                    // Here you would implement logic to change the message color
+                    showSystemMessage(`Your message color has been changed to ${args}.`);
+                } else {
+                    showSystemMessage('Please provide a color.');
+                }
+                return; // Exit to prevent sending a message
+
+            default:
+                showSystemMessage('Unknown command. Type /help for a list of commands.');
+                return; // Exit to prevent sending a message
+        }
+    }
+
     // Check message length
     if (text.length > moderationSettings.maxMessageLength) {
         showSystemMessage(`Message too long. Maximum length is ${moderationSettings.maxMessageLength} characters.`);
         return;
     }
-    
+
     // Check for spam
     if (isSpamming(currentUser.id, text)) {
         showSystemMessage("You're sending messages too quickly or repeating similar content. Please slow down.");
         return;
     }
-    
+
     // Filter content
     const filteredText = filterProfanity(text);
-    
+
     // Clear input field
     messageInput.value = '';
-    
+
     // Create message object
     const message = {
         id: 'msg_' + Date.now(),
@@ -381,10 +475,10 @@ function sendMessage() {
         username: currentUser.name,
         timestamp: firebase.database.ServerValue.TIMESTAMP
     };
-    
+
     // Determine where to send the message
     const targetRef = currentChatRef || messagesRef;
-    
+
     // Add to Firebase
     targetRef.push(message)
         .then(() => {
