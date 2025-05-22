@@ -49,8 +49,8 @@ const moderationSettings = {
     maxSimilarMessages: 3 // Max number of similar messages allowed in timeWindow
 };
 
-// Profanity list - words to filter (expanded)
-const profanityList = [
+// Initial profanity list (will be replaced by the GitHub list if fetch succeeds)
+let profanityList = [
     'nigger', 'nigga', 'fuck', 'shit', 'ass', 'bitch', 'cunt', 'dick', 'pussy', 
     'whore', 'slut', 'faggot', 'retard', 'coon', 'kike', 'spic', 'chink', 'gook',
     'wetback', 'nazi', 'paki', 'jap', 'dyke', 'fag', 'homo', 'queer', 'damn',
@@ -60,6 +60,20 @@ const profanityList = [
 // Anti-spam tracking
 const userMessageCounts = {};
 const userMessageHistory = {}; // For tracking message similarity
+
+// Function to fetch and load comprehensive profanity list from GitHub
+async function initProfanityFilter() {
+    try {
+        const response = await fetch('https://raw.githubusercontent.com/RobertJGabriel/Google-profanity-words/master/list.txt');
+        const text = await response.text();
+        profanityList = text.split('\n').filter(word => word.trim() !== '');
+        console.log('Enhanced profanity filter loaded with', profanityList.length, 'words');
+    } catch (error) {
+        console.error('Failed to load enhanced profanity list:', error);
+        // Keep using the default list if fetch fails
+        console.log('Using default profanity list with', profanityList.length, 'words');
+    }
+}
 
 // Initialize App
 function init() {
@@ -93,6 +107,9 @@ function init() {
             showSystemMessage('Connected to chat server!');
         }
     });
+    
+    // Initialize the enhanced profanity filter
+    initProfanityFilter();
 }
 
 // Calculate similarity between two strings (Levenshtein distance based)
@@ -313,17 +330,19 @@ function isSpamming(userId, message) {
     return userMessageCounts[userId].count > moderationSettings.maxMessagesPerMinute;
 }
 
-// Filter profanity with improved detection
+// Filter profanity with improved detection using word boundaries
 function filterProfanity(text) {
     if (!moderationSettings.profanityFilter) return text;
     
     let filteredText = text;
     
-    // Replace profanity with asterisks
+    // Replace profanity with asterisks using proper word boundaries
     profanityList.forEach(word => {
-        // Match whole words and common obfuscations (f*ck, f**k, etc)
-        const regex = new RegExp(`\\b${word.split('').join('[\\*\\-\\_\\.\\s]?')}\\b`, 'gi');
-        filteredText = filteredText.replace(regex, '*'.repeat(word.length));
+        if (word && word.trim()) {
+            // Match whole words with word boundaries
+            const regex = new RegExp('\\b' + word + '\\b', 'gi');
+            filteredText = filteredText.replace(regex, '*'.repeat(word.length));
+        }
     });
     
     return filteredText;
