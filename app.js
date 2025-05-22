@@ -1,7 +1,7 @@
 /**
  * Idiotic Congress Chat Application
  * A simple real-time chat application using Firebase
- * With added account persistence and content moderation
+ * With added account persistence, content moderation, and automatic chat switching
  */
 
 // Firebase Configuration
@@ -36,24 +36,30 @@ let userRef = null;
 let messagesRef = database.ref('messages');
 let usersRef = database.ref('users');
 let userDataRef = database.ref('userData');
+let currentChatRef = null; // Reference to current chat room
 
 // Moderation settings
 const moderationSettings = {
     enabled: true,
     maxMessagesPerMinute: 10,
     profanityFilter: true,
-    maxMessageLength: 500
+    maxMessageLength: 500,
+    similarityThreshold: 0.8, // Threshold for detecting similar messages (spam)
+    timeWindow: 10000, // 10 seconds window for spam detection
+    maxSimilarMessages: 3 // Max number of similar messages allowed in timeWindow
 };
 
-// Profanity list - words to filter
+// Profanity list - words to filter (expanded)
 const profanityList = [
     'nigger', 'nigga', 'fuck', 'shit', 'ass', 'bitch', 'cunt', 'dick', 'pussy', 
     'whore', 'slut', 'faggot', 'retard', 'coon', 'kike', 'spic', 'chink', 'gook',
-    'wetback', 'nazi', 'paki', 'jap', 'dyke', 'fag', 'homo', 'queer'
+    'wetback', 'nazi', 'paki', 'jap', 'dyke', 'fag', 'homo', 'queer', 'damn',
+    'bastard', 'asshole', 'piss', 'cock', 'bullshit', 'motherfucker', 'fucker'
 ];
 
 // Anti-spam tracking
 const userMessageCounts = {};
+const userMessageHistory = {}; // For tracking message similarity
 
 // Initialize App
 function init() {
@@ -89,7 +95,47 @@ function init() {
     });
 }
 
-// Handle user login
+// Calculate similarity between two strings (Levenshtein distance based)
+function calculateSimilarity(str1, str2) {
+    if (!str1 || !str2) return 0;
+    
+    str1 = str1.toLowerCase();
+    str2 = str2.toLowerCase();
+    
+    const shorter = str1.length < str2.length ? str1 : str2;
+    const longer = str1.length >= str2.length ? str1 : str2;
+    
+    if (longer.length === 0) return 1.0;
+    
+    return (longer.length - editDistance(shorter, longer)) / longer.length;
+}
+
+// Levenshtein distance calculation
+function editDistance(s1, s2) {
+    s1 = s1.toLowerCase();
+    s2 = s2.toLowerCase();
+
+    const costs = [];
+    for (let i = 0; i <= s1.length; i++) {
+        let lastValue = i;
+        for (let j = 0; j <= s2.length; j++) {
+            if (i === 0) {
+                costs[j] = j;
+            } else if (j > 0) {
+                let newValue = costs[j - 1];
+                if (s1.charAt(i - 1) !== s2.charAt(j - 1)) {
+                    newValue = Math.min(Math.min(newValue, lastValue), costs[j]) + 1;
+                }
+                costs[j - 1] = lastValue;
+                lastValue = newValue;
+            }
+        }
+        if (i > 0) costs[s2.length] = lastValue;
+    }
+    return costs[s2.length];
+}
+
+// Handle user login with case-insensitive username matching
 function handleLogin() {
     const username = usernameInput.value.trim();
     
@@ -98,28 +144,42 @@ function handleLogin() {
         return;
     }
     
-    // Check if this username exists in userData
-    userDataRef.orderByChild('name').equalTo(username).once('value')
+    // Get all users and perform case-insensitive matching
+    userDataRef.once('value')
         .then((snapshot) => {
+            let matchedUserId = null;
+            let matchedUserData = null;
+            
+            // Check for case-insensitive match
             if (snapshot.exists()) {
+                const users = snapshot.val();
+                Object.keys(users).forEach(userId => {
+                    const userData = users[userId];
+                    if (userData.name && userData.name.toLowerCase() === username.toLowerCase()) {
+                        matchedUserId = userId;
+                        matchedUserData = userData;
+                    }
+                });
+            }
+            
+            if (matchedUserId) {
                 // User exists, retrieve their data
-                const userData = Object.values(snapshot.val())[0];
-                const userId = Object.keys(snapshot.val())[0];
-                
-                // Use existing user data
                 currentUser = {
-                    id: userId,
-                    name: username,
-                    joinedAt: userData.joinedAt,
+                    id: matchedUserId,
+                    name: matchedUserData.name, // Use the exact case from the database
+                    joinedAt: matchedUserData.joinedAt,
                     lastLogin: firebase.database.ServerValue.TIMESTAMP
                 };
                 
                 // Update user data
-                userDataRef.child(userId).update({
+                userDataRef.child(matchedUserId).update({
                     lastLogin: firebase.database.ServerValue.TIMESTAMP
                 });
                 
-                console.log(`Welcome back, ${username}!`);
+                console.log(`Welcome back, ${matchedUserData.name}!`);
+                
+                // Show the username with the correct case from the database
+                showSystemMessage(`Logging in as ${matchedUserData.name} (matched from ${username})`);
             } else {
                 // New user, create new data
                 const userId = 'user_' + Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
@@ -127,7 +187,7 @@ function handleLogin() {
                 // Create user object
                 currentUser = {
                     id: userId,
-                    name: username,
+                    name: username, // Use the username as entered
                     joinedAt: firebase.database.ServerValue.TIMESTAMP,
                     lastLogin: firebase.database.ServerValue.TIMESTAMP
                 };
@@ -153,8 +213,11 @@ function handleLogin() {
             loginContainer.classList.add('hidden');
             chatContainer.classList.remove('hidden');
             
+            // Set the current chat reference to the user's personal chat
+            currentChatRef = database.ref(`userChats/${currentUser.id}`);
+            
             // Show welcome message
-            showSystemMessage(`Welcome to Idiotic Congress, ${username}!`);
+            showSystemMessage(`Welcome to Idiotic Congress, ${currentUser.name}!`);
             
             // Start listening for messages
             listenForMessages();
@@ -173,29 +236,75 @@ function listenForMessages() {
     // Clear any existing listeners
     messagesRef.off();
     
+    // If we have a specific chat reference, use that instead
+    const activeMessagesRef = currentChatRef || messagesRef;
+    
     // Get last 50 messages
-    messagesRef.limitToLast(50).on('child_added', (snapshot) => {
+    activeMessagesRef.limitToLast(50).on('child_added', (snapshot) => {
         const message = snapshot.val();
         displayMessage(message);
     });
 }
 
-// Check for spam
-function isSpamming(userId) {
+// Switch to a specific user's chat
+function switchToUserChat(userId, username) {
+    // Clear current messages display
+    messagesContainer.innerHTML = '';
+    
+    // Set the current chat reference
+    currentChatRef = database.ref(`userChats/${userId}`);
+    
+    // Show system message
+    showSystemMessage(`Switched to ${username}'s chat`);
+    
+    // Start listening for messages in this chat
+    listenForMessages();
+}
+
+// Check for spam with enhanced detection
+function isSpamming(userId, message) {
+    const now = Date.now();
+    
+    // Initialize user tracking if not exists
     if (!userMessageCounts[userId]) {
         userMessageCounts[userId] = {
             count: 0,
-            resetTime: Date.now() + 60000 // 1 minute from now
+            resetTime: now + 60000 // 1 minute from now
         };
     }
     
+    // Initialize message history if not exists
+    if (!userMessageHistory[userId]) {
+        userMessageHistory[userId] = [];
+    }
+    
     // Reset counter if time expired
-    if (Date.now() > userMessageCounts[userId].resetTime) {
+    if (now > userMessageCounts[userId].resetTime) {
         userMessageCounts[userId] = {
             count: 0,
-            resetTime: Date.now() + 60000
+            resetTime: now + 60000
         };
     }
+    
+    // Clean up old messages from history
+    userMessageHistory[userId] = userMessageHistory[userId].filter(
+        msg => now - msg.timestamp < moderationSettings.timeWindow
+    );
+    
+    // Check for similar messages in recent history
+    const similarMessages = userMessageHistory[userId].filter(
+        msg => calculateSimilarity(msg.text, message) > moderationSettings.similarityThreshold
+    );
+    
+    if (similarMessages.length >= moderationSettings.maxSimilarMessages) {
+        return true; // Detected as spam due to similar messages
+    }
+    
+    // Add current message to history
+    userMessageHistory[userId].push({
+        text: message,
+        timestamp: now
+    });
     
     // Increment message count
     userMessageCounts[userId].count++;
@@ -204,7 +313,7 @@ function isSpamming(userId) {
     return userMessageCounts[userId].count > moderationSettings.maxMessagesPerMinute;
 }
 
-// Filter profanity
+// Filter profanity with improved detection
 function filterProfanity(text) {
     if (!moderationSettings.profanityFilter) return text;
     
@@ -212,7 +321,8 @@ function filterProfanity(text) {
     
     // Replace profanity with asterisks
     profanityList.forEach(word => {
-        const regex = new RegExp(word, 'gi');
+        // Match whole words and common obfuscations (f*ck, f**k, etc)
+        const regex = new RegExp(`\\b${word.split('').join('[\\*\\-\\_\\.\\s]?')}\\b`, 'gi');
         filteredText = filteredText.replace(regex, '*'.repeat(word.length));
     });
     
@@ -233,8 +343,8 @@ function sendMessage() {
     }
     
     // Check for spam
-    if (isSpamming(currentUser.id)) {
-        showSystemMessage("You're sending messages too quickly. Please slow down.");
+    if (isSpamming(currentUser.id, text)) {
+        showSystemMessage("You're sending messages too quickly or repeating similar content. Please slow down.");
         return;
     }
     
@@ -253,8 +363,11 @@ function sendMessage() {
         timestamp: firebase.database.ServerValue.TIMESTAMP
     };
     
+    // Determine where to send the message
+    const targetRef = currentChatRef || messagesRef;
+    
     // Add to Firebase
-    messagesRef.push(message)
+    targetRef.push(message)
         .then(() => {
             console.log('Message sent successfully');
         })
@@ -286,7 +399,7 @@ function displayMessage(message) {
         messageElement.innerHTML = `
             <div class="message-bubble">${escapeHtml(message.text)}</div>
             <div class="message-info">
-                ${isSelf ? 'You' : escapeHtml(message.username)} • ${timeString}
+                <span class="username" onclick="handleUsernameClick('${message.userId}', '${escapeHtml(message.username)}')">${isSelf ? 'You' : escapeHtml(message.username)}</span> • ${timeString}
             </div>
         `;
     }
@@ -295,6 +408,14 @@ function displayMessage(message) {
     
     // Scroll to bottom
     messagesContainer.scrollTop = messagesContainer.scrollHeight;
+}
+
+// Handle username click to switch to their chat
+function handleUsernameClick(userId, username) {
+    if (!currentUser) return;
+    if (userId === currentUser.id) return; // Don't switch to your own chat
+    
+    switchToUserChat(userId, username);
 }
 
 // Show system message
@@ -322,6 +443,9 @@ window.addEventListener('beforeunload', () => {
         userRef.remove();
     }
 });
+
+// Make the handleUsernameClick function globally available
+window.handleUsernameClick = handleUsernameClick;
 
 // Initialize the app
 init();
