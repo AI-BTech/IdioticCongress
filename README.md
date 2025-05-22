@@ -69,7 +69,3 @@ Simply open the `index.html` file in your browser or use a local server.
 ## Deployment
 
 This app is deployed on GitHub Pages at: [https://ai-btech.github.io/IdioticCongress/](https://ai-btech.github.io/IdioticCongress/)
-
-## License
-
-MIT
