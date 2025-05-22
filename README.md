@@ -1,3 +1,5 @@
+
+[CLICK HERE TO GO TO THE ACTUAL THING](https://bit.ly/theidioticcongres
 # Idiotic Congress Chat
 
 A simple real-time chat application built with Firebase Realtime Database.
